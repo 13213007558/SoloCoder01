@@ -1,64 +1,96 @@
 <template>
   <div class="kanban-container">
     <header class="kanban-header">
-      <h1>团队任务看板</h1>
-      <el-button type="primary" @click="handleAddTask" :icon="Plus">新建任务</el-button>
+      <div class="header-inner">
+        <div class="header-left">
+          <div class="logo-icon">
+            <el-icon size="24"><Tickets /></el-icon>
+          </div>
+          <h1>团队任务看板</h1>
+        </div>
+        <el-button type="primary" @click="handleAddTask" :icon="Plus" size="large">新建任务</el-button>
+      </div>
     </header>
 
-    <main class="kanban-content">
-      <div
-        v-for="column in columns"
-        :key="column.id"
-        class="kanban-column"
-      >
-        <div class="column-header">
-          <span class="column-title">{{ column.label }}</span>
-          <el-tag :type="column.tagType" size="small">
-            {{ getTasksByStatus(column.id).length }}
-          </el-tag>
-        </div>
-
+    <main class="kanban-main">
+      <div class="kanban-content">
         <div
-          class="column-tasks"
-          :class="{ 'drag-over': dragStatus.column === column.id && dragStatus.active }"
-          @dragover.prevent="onDragOver(column.id)"
-          @dragleave="onDragLeave"
-          @drop="onDrop(column.id)"
+          v-for="column in columns"
+          :key="column.id"
+          class="kanban-column"
         >
+          <div class="column-header" :style="{ borderLeftColor: column.color }">
+            <div class="column-left">
+              <span class="column-dot" :style="{ backgroundColor: column.color }"></span>
+              <span class="column-title">{{ column.label }}</span>
+            </div>
+            <span class="column-count">{{ getTasksByStatus(column.id).length }}</span>
+          </div>
+
           <div
-            v-for="(task, index) in getTasksByStatus(column.id)"
-            :key="task.id"
-            class="task-card"
-            draggable="true"
-            :class="{ 'dragging': dragStatus.taskId === task.id }"
-            @dragstart="onDragStart(task, column.id, index)"
-            @dragend="onDragEnd"
+            class="column-tasks"
+            :class="{ 'drag-over': dragStatus.active && dragStatus.targetColumn === column.id }"
+            @dragover.prevent="onDragOver(column.id)"
+            @dragleave="onDragLeave"
+            @drop="onDrop(column.id)"
           >
-            <div class="task-header">
-              <span class="task-priority" :class="`priority-${task.priority}`">
-                {{ getPriorityLabel(task.priority) }}
-              </span>
-              <div class="task-actions">
-                <el-button type="text" size="small" @click.stop="handleEditTask(task)" :icon="Edit" />
-                <el-button type="text" size="small" class="danger" @click.stop="handleDeleteTask(task)" :icon="Delete" />
+            <div
+              v-for="(task, index) in getTasksByStatus(column.id)"
+              :key="task.id"
+              class="task-card"
+              draggable="true"
+              :class="{ 
+                'dragging': dragStatus.taskId === task.id,
+                'completed': task.status === 'done'
+              }"
+              @dragstart="onDragStart(task, column.id, index)"
+              @dragend="onDragEnd"
+            >
+              <div class="task-header">
+                <div class="task-priority-badge" :class="`priority-${task.priority}`">
+                  <el-icon v-if="task.priority === 'high'" size="12"><Warning /></el-icon>
+                  <el-icon v-else-if="task.priority === 'medium'" size="12"><InfoFilled /></el-icon>
+                  <el-icon v-else size="12"><CircleCheck /></el-icon>
+                  <span>{{ getPriorityLabel(task.priority) }}</span>
+                </div>
+                <div class="task-actions">
+                  <el-tooltip content="编辑任务" placement="top">
+                    <el-button type="primary" text @click.stop="handleEditTask(task)" :icon="Edit" />
+                  </el-tooltip>
+                  <el-tooltip content="删除任务" placement="top">
+                    <el-button type="danger" text @click.stop="handleDeleteTask(task)" :icon="Delete" />
+                  </el-tooltip>
+                </div>
+              </div>
+
+              <div class="task-content">
+                <div class="task-title">{{ task.title }}</div>
+                <div v-if="task.description" class="task-description">{{ task.description }}</div>
+              </div>
+
+              <div class="task-footer">
+                <div class="footer-left">
+                  <el-tag v-if="task.dueDate" :type="getDueDateTagType(task.dueDate)" effect="light" size="small" class="due-date-tag">
+                    <el-icon><Calendar /></el-icon>
+                    <span>{{ formatDate(task.dueDate) }}</span>
+                  </el-tag>
+                </div>
+                <div class="footer-right">
+                  <div v-if="task.assignee" class="assignee-badge">
+                    <el-avatar :size="20" class="assignee-avatar">
+                      {{ getInitial(task.assignee) }}
+                    </el-avatar>
+                    <span class="assignee-name">{{ task.assignee }}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div class="task-title">{{ task.title }}</div>
-            <div v-if="task.description" class="task-description">{{ task.description }}</div>
-
-            <div class="task-footer">
-              <el-tag v-if="task.dueDate" size="small" :type="getDueDateTagType(task.dueDate)">
-                {{ formatDate(task.dueDate) }}
-              </el-tag>
-              <el-tag v-if="task.assignee" size="small" type="info">
-                {{ task.assignee }}
-              </el-tag>
+            <div v-if="getTasksByStatus(column.id).length === 0" class="empty-state">
+              <el-icon size="40" class="empty-icon"><Document /></el-icon>
+              <span class="empty-text">暂无任务</span>
+              <span class="empty-hint">拖拽任务到此处</span>
             </div>
-          </div>
-
-          <div v-if="getTasksByStatus(column.id).length === 0" class="empty-hint">
-            暂无任务，拖拽任务到此处
           </div>
         </div>
       </div>
@@ -67,10 +99,11 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑任务' : '新建任务'"
-      width="500px"
+      width="560px"
       :close-on-click-modal="false"
+      class="task-dialog"
     >
-      <el-form :model="formData" :rules="formRules" ref="formRef" label-width="80px">
+      <el-form :model="formData" :rules="formRules" ref="formRef" label-width="80px" class="task-form">
         <el-form-item label="标题" prop="title">
           <el-input v-model="formData.title" placeholder="请输入任务标题" maxlength="50" show-word-limit />
         </el-form-item>
@@ -82,38 +115,57 @@
               :key="column.id"
               :label="column.label"
               :value="column.id"
-            />
+            >
+              <span class="option-dot" :style="{ backgroundColor: column.color }"></span>
+              <span>{{ column.label }}</span>
+            </el-option>
           </el-select>
         </el-form-item>
 
         <el-form-item label="优先级" prop="priority">
-          <el-select v-model="formData.priority" placeholder="请选择优先级" style="width: 100%">
-            <el-option label="高" value="high" />
-            <el-option label="中" value="medium" />
-            <el-option label="低" value="low" />
-          </el-select>
+          <el-radio-group v-model="formData.priority">
+            <el-radio-button value="high">
+              <span class="priority-option"><el-icon><Warning /></el-icon> 高</span>
+            </el-radio-button>
+            <el-radio-button value="medium">
+              <span class="priority-option"><el-icon><InfoFilled /></el-icon> 中</span>
+            </el-radio-button>
+            <el-radio-button value="low">
+              <span class="priority-option"><el-icon><CircleCheck /></el-icon> 低</span>
+            </el-radio-button>
+          </el-radio-group>
         </el-form-item>
 
-        <el-form-item label="负责人" prop="assignee">
-          <el-input v-model="formData.assignee" placeholder="请输入负责人姓名" maxlength="20" />
-        </el-form-item>
-
-        <el-form-item label="截止日期" prop="dueDate">
-          <el-date-picker
-            v-model="formData.dueDate"
-            type="date"
-            placeholder="请选择截止日期"
-            style="width: 100%"
-            value-format="YYYY-MM-DD"
-          />
-        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="负责人" prop="assignee">
+              <el-input v-model="formData.assignee" placeholder="负责人姓名" maxlength="20" clearable>
+                <template #prefix><el-icon><User /></el-icon></template>
+              </el-input>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="截止日期" prop="dueDate">
+              <el-date-picker
+                v-model="formData.dueDate"
+                type="date"
+                placeholder="选择日期"
+                style="width: 100%"
+                value-format="YYYY-MM-DD"
+                format="YYYY-MM-DD"
+              >
+                <template #prefix><el-icon><Calendar /></el-icon></template>
+              </el-date-picker>
+            </el-form-item>
+          </el-col>
+        </el-row>
 
         <el-form-item label="描述" prop="description">
           <el-input
             v-model="formData.description"
             type="textarea"
             :rows="3"
-            placeholder="请输入任务描述（可选）"
+            placeholder="添加任务描述（可选）"
             maxlength="200"
             show-word-limit
           />
@@ -121,36 +173,48 @@
       </el-form>
 
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit" :loading="submitting">确定</el-button>
+        <el-button @click="dialogVisible = false" size="large">取消</el-button>
+        <el-button type="primary" @click="handleSubmit" :loading="submitting" size="large">
+          {{ isEdit ? '保存修改' : '创建任务' }}
+        </el-button>
       </template>
     </el-dialog>
 
     <el-dialog
       v-model="deleteDialogVisible"
       title="确认删除"
-      width="400px"
+      width="420px"
+      class="delete-dialog"
     >
-      <p>确定要删除任务「{{ taskToDelete?.title }}」吗？</p>
+      <div class="delete-warning">
+        <el-icon size="40" color="#F56C6C"><Warning /></el-icon>
+        <div class="warning-content">
+          <p class="warning-title">确定要删除这个任务吗？</p>
+          <p class="warning-desc">任务「{{ taskToDelete?.title }}」将被永久删除，此操作无法撤销。</p>
+        </div>
+      </div>
       <template #footer>
-        <el-button @click="deleteDialogVisible = false">取消</el-button>
-        <el-button type="danger" @click="confirmDelete">确定删除</el-button>
+        <el-button @click="deleteDialogVisible = false" size="large">取消</el-button>
+        <el-button type="danger" @click="confirmDelete" size="large">确认删除</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus, Edit, Delete } from '@element-plus/icons-vue'
+import { 
+  Plus, Edit, Delete, Warning, InfoFilled, CircleCheck, 
+  Calendar, User, Tickets, Document 
+} from '@element-plus/icons-vue'
 
 const STORAGE_KEY = 'kanban-tasks'
 
 const columns = [
-  { id: 'todo', label: '待办', tagType: 'info' },
-  { id: 'inProgress', label: '进行中', tagType: 'warning' },
-  { id: 'done', label: '已完成', tagType: 'success' }
+  { id: 'todo', label: '待办', color: '#3B82F6' },
+  { id: 'inProgress', label: '进行中', color: '#F59E0B' },
+  { id: 'done', label: '已完成', color: '#10B981' }
 ]
 
 const tasks = ref([])
@@ -163,8 +227,8 @@ const formRef = ref(null)
 
 const dragStatus = ref({
   taskId: null,
-  column: null,
-  index: null,
+  sourceColumn: null,
+  targetColumn: null,
   active: false
 })
 
@@ -193,9 +257,17 @@ const getPriorityLabel = (priority) => {
   return map[priority] || '中'
 }
 
+const getInitial = (name) => {
+  if (!name) return '?'
+  return name.charAt(0).toUpperCase()
+}
+
 const formatDate = (date) => {
   if (!date) return ''
-  return date
+  const d = new Date(date)
+  const month = (d.getMonth() + 1).toString().padStart(2, '0')
+  const day = d.getDate().toString().padStart(2, '0')
+  return `${month}月${day}日`
 }
 
 const getDueDateTagType = (dueDate) => {
@@ -271,7 +343,7 @@ const confirmDelete = () => {
   if (index > -1) {
     tasks.value.splice(index, 1)
     saveToStorage()
-    ElMessage.success('删除成功')
+    ElMessage.success('任务已删除')
   }
   deleteDialogVisible.value = false
   taskToDelete.value = null
@@ -289,7 +361,7 @@ const handleSubmit = async () => {
         if (index > -1) {
           tasks.value[index] = { ...formData.value }
         }
-        ElMessage.success('编辑成功')
+        ElMessage.success('任务已更新')
       } else {
         const newTask = {
           ...formData.value,
@@ -297,7 +369,7 @@ const handleSubmit = async () => {
           createdAt: new Date().toISOString()
         }
         tasks.value.push(newTask)
-        ElMessage.success('创建成功')
+        ElMessage.success('任务创建成功')
       }
       
       saveToStorage()
@@ -310,84 +382,104 @@ const handleSubmit = async () => {
 const onDragStart = (task, columnId, index) => {
   dragStatus.value = {
     taskId: task.id,
-    column: columnId,
-    index: index,
+    sourceColumn: columnId,
+    targetColumn: null,
     active: true
   }
+  nextTick(() => {
+    const cards = document.querySelectorAll('.task-card')
+    cards.forEach(card => {
+      if (card.classList.contains('dragging')) {
+        card.style.opacity = '0.5'
+      }
+    })
+  })
 }
 
 const onDragEnd = () => {
   dragStatus.value.active = false
+  const cards = document.querySelectorAll('.task-card')
+  cards.forEach(card => {
+    card.style.opacity = ''
+  })
 }
 
 const onDragOver = (columnId) => {
   dragStatus.value.active = true
+  dragStatus.value.targetColumn = columnId
 }
 
 const onDragLeave = () => {
-  dragStatus.value.active = false
 }
 
-const onDrop = (targetColumnId) => {
-  const { taskId, column, index } = dragStatus.value
-  
-  if (!taskId || !column) {
-    dragStatus.value.active = false
-    return
-  }
-  
+const reorderTasks = (taskId, sourceColumnId, targetColumnId) => {
   const taskIndex = tasks.value.findIndex(t => t.id === taskId)
-  if (taskIndex === -1) {
-    dragStatus.value.active = false
-    return
-  }
+  if (taskIndex === -1) return false
   
   const task = tasks.value[taskIndex]
   
-  if (column === targetColumnId) {
-    const sameColumnTasks = getTasksByStatus(column)
-    if (sameColumnTasks.length <= 1) {
-      dragStatus.value.active = false
-      return
-    }
+  if (sourceColumnId === targetColumnId) {
+    const columnTasks = getTasksByStatus(sourceColumnId)
+    if (columnTasks.length <= 1) return false
     
-    const currentIndex = sameColumnTasks.findIndex(t => t.id === taskId)
-    if (currentIndex === -1) {
-      dragStatus.value.active = false
-      return
-    }
+    const currentIndex = columnTasks.findIndex(t => t.id === taskId)
     
-    let newIndex = currentIndex
-    if (index < currentIndex) {
-      newIndex = Math.max(0, currentIndex - 1)
+    const newOrder = [...columnTasks]
+    const [removed] = newOrder.splice(currentIndex, 1)
+    
+    let insertIndex = 0
+    if (currentIndex === 0) {
+      insertIndex = 1
+    } else if (currentIndex === columnTasks.length - 1) {
+      insertIndex = columnTasks.length - 2
     } else {
-      newIndex = Math.min(sameColumnTasks.length - 1, currentIndex + 1)
-    }
-    
-    if (newIndex !== currentIndex) {
-      const taskToMove = sameColumnTasks[currentIndex]
-      const allTasks = tasks.value
-      
-      const globalCurrentIndex = allTasks.findIndex(t => t.id === taskToMove.id)
-      const removed = allTasks.splice(globalCurrentIndex, 1)[0]
-      
-      const targetTask = sameColumnTasks[newIndex]
-      const globalNewIndex = allTasks.findIndex(t => t.id === targetTask.id)
-      
-      if (newIndex < currentIndex) {
-        allTasks.splice(globalNewIndex, 0, removed)
-      } else {
-        allTasks.splice(globalNewIndex + 1, 0, removed)
+      insertIndex = currentIndex + 1
+      if (insertIndex >= newOrder.length) {
+        insertIndex = newOrder.length
       }
     }
+    
+    newOrder.splice(insertIndex, 0, removed)
+    
+    const otherTasks = tasks.value.filter(t => t.status !== sourceColumnId)
+    
+    tasks.value = [...otherTasks, ...newOrder]
+    
+    return true
+    
   } else {
     task.status = targetColumnId
+    
+    const otherTasks = tasks.value.filter(t => t.id !== taskId)
+    
+    tasks.value = [...otherTasks, task]
+    
+    return true
+  }
+}
+
+const onDrop = (targetColumnId) => {
+  const { taskId, sourceColumn } = dragStatus.value
+  
+  if (!taskId || !sourceColumn) {
+    dragStatus.value.active = false
+    return
   }
   
-  saveToStorage()
-  dragStatus.value.active = false
+  const success = reorderTasks(taskId, sourceColumn, targetColumnId)
   
-  ElMessage.success('任务已移动')
+  if (success) {
+    saveToStorage()
+    
+    if (sourceColumn !== targetColumnId) {
+      const columnLabel = columns.find(c => c.id === targetColumnId)?.label || ''
+      ElMessage.success(`任务已移动到「${columnLabel}」`)
+    } else {
+      ElMessage.success('任务顺序已调整')
+    }
+  }
+  
+  dragStatus.value.active = false
 }
 
 onMounted(() => {
@@ -398,160 +490,238 @@ onMounted(() => {
 <style scoped>
 .kanban-container {
   min-height: 100vh;
-  background-color: #f0f2f5;
+  background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);
+  display: flex;
+  flex-direction: column;
 }
 
 .kanban-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.header-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 16px 24px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
-  background-color: #fff;
-  border-bottom: 1px solid #e8e8e8;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #3B82F6 0%, #6366F1 100%);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
 .kanban-header h1 {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
-  color: #1f2937;
+  color: #1E293B;
   margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.kanban-main {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
 }
 
 .kanban-content {
   display: flex;
-  gap: 16px;
-  padding: 24px;
-  overflow-x: auto;
-  min-height: calc(100vh - 72px);
+  gap: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  min-width: fit-content;
 }
 
 .kanban-column {
   flex: 1;
-  min-width: 300px;
-  max-width: 400px;
-  background-color: #f9fafb;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  padding: 12px;
+  min-width: 340px;
+  max-width: 420px;
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
+  height: fit-content;
+  max-height: calc(100vh - 140px);
+  overflow: hidden;
 }
 
 .column-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0 12px;
-  border-bottom: 1px solid #e5e7eb;
-  margin-bottom: 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid #F1F5F9;
+  border-left: 4px solid;
+  background: #FAFBFC;
+  border-radius: 12px 12px 0 0;
+  margin: -1px -1px 0 -1px;
+}
+
+.column-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.column-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
 
 .column-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  color: #374151;
+  color: #334155;
+}
+
+.column-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748B;
+  background: #F1F5F9;
+  padding: 4px 10px;
+  border-radius: 12px;
+  min-width: 24px;
+  text-align: center;
 }
 
 .column-tasks {
   flex: 1;
-  min-height: 100px;
-  padding: 4px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
+  min-height: 80px;
+  padding: 12px;
+  overflow-y: auto;
+  transition: all 0.2s ease;
 }
 
 .column-tasks.drag-over {
-  background-color: #e0e7ff;
-  border: 2px dashed #6366f1;
+  background: #EEF2FF;
+  border: 2px dashed #6366F1;
+  border-radius: 8px;
+  margin: 4px;
 }
 
 .task-card {
-  background-color: #fff;
-  border-radius: 6px;
-  padding: 12px;
-  margin-bottom: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e5e7eb;
+  background: #FFFFFF;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid #E2E8F0;
   cursor: grab;
-  transition: box-shadow 0.2s, transform 0.2s;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.task-card:last-child {
+  margin-bottom: 0;
 }
 
 .task-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  transform: translateY(-2px);
+  border-color: #CBD5E1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.task-card:active {
+  cursor: grabbing;
 }
 
 .task-card.dragging {
-  opacity: 0.5;
-  cursor: grabbing;
+  opacity: 0.3;
+  transform: scale(1.02);
+}
+
+.task-card.completed {
+  background: #FCFDFE;
+}
+
+.task-card.completed .task-title {
+  color: #94A3B8;
 }
 
 .task-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
-.task-priority {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 4px;
+.task-priority-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
   font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 6px;
 }
 
-.priority-high {
-  background-color: #fef2f2;
-  color: #dc2626;
+.task-priority-badge.priority-high {
+  background: #FEF2F2;
+  color: #DC2626;
 }
 
-.priority-medium {
-  background-color: #fffbeb;
-  color: #d97706;
+.task-priority-badge.priority-medium {
+  background: #FFFBEB;
+  color: #D97706;
 }
 
-.priority-low {
-  background-color: #f0fdf4;
-  color: #16a34a;
+.task-priority-badge.priority-low {
+  background: #F0FDF4;
+  color: #16A34A;
 }
 
 .task-actions {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity 0.2s ease;
 }
 
 .task-card:hover .task-actions {
   opacity: 1;
 }
 
-.task-actions .el-button--text {
-  padding: 2px 4px;
-}
-
-.task-actions .el-button--text.danger {
-  color: #dc2626;
-}
-
-.task-actions .el-button--text:hover {
-  color: #4f46e5;
+.task-content {
+  margin-bottom: 12px;
 }
 
 .task-title {
   font-size: 14px;
   font-weight: 500;
-  color: #111827;
+  color: #1E293B;
+  line-height: 1.5;
   margin-bottom: 6px;
-  line-height: 1.4;
 }
 
 .task-description {
-  font-size: 13px;
-  color: #6b7280;
+  font-size: 12px;
+  color: #64748B;
   line-height: 1.5;
-  margin-bottom: 10px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -560,40 +730,204 @@ onMounted(() => {
 
 .task-footer {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid #F1F5F9;
+}
+
+.footer-left,
+.footer-right {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+}
+
+.due-date-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  height: 22px;
+}
+
+.assignee-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: #F8FAFC;
+  border-radius: 6px;
+  border: 1px solid #E2E8F0;
+}
+
+.assignee-avatar {
+  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.assignee-name {
+  font-size: 11px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #94A3B8;
+}
+
+.empty-icon {
+  margin-bottom: 12px;
+  color: #CBD5E1;
+}
+
+.empty-text {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
 }
 
 .empty-hint {
-  text-align: center;
-  color: #9ca3af;
-  font-size: 13px;
-  padding: 20px;
-  border: 2px dashed #e5e7eb;
-  border-radius: 6px;
+  font-size: 12px;
+  color: #CBD5E1;
+}
+</style>
+
+<style>
+.el-dialog {
+  border-radius: 16px;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.12);
 }
 
-:deep(.el-dialog) {
-  border-radius: 8px;
-}
-
-:deep(.el-dialog__header) {
-  padding: 16px 20px;
-  border-bottom: 1px solid #e5e7eb;
+.el-dialog__header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #F1F5F9;
   margin-right: 0;
 }
 
-:deep(.el-dialog__body) {
-  padding: 20px;
+.el-dialog__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1E293B;
 }
 
-:deep(.el-dialog__footer) {
-  padding: 12px 20px;
-  border-top: 1px solid #e5e7eb;
+.el-dialog__body {
+  padding: 24px;
 }
 
-:deep(.el-form-item__label) {
+.el-dialog__footer {
+  padding: 16px 24px;
+  border-top: 1px solid #F1F5F9;
+}
+
+.el-form-item__label {
   font-weight: 500;
-  color: #374151;
+  color: #475569;
+  font-size: 13px;
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  border-radius: 8px;
+  border-color: #E2E8F0;
+  box-shadow: none;
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover {
+  border-color: #CBD5E1;
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focus {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.el-radio-button__original-radio:checked + .el-radio-button__inner {
+  background: #3B82F6;
+  border-color: #3B82F6;
+}
+
+.el-radio-button:first-child .el-radio-button__inner {
+  border-radius: 8px 0 0 8px;
+}
+
+.el-radio-button:last-child .el-radio-button__inner {
+  border-radius: 0 8px 8px 0;
+}
+
+.priority-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.option-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.delete-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.warning-content {
+  flex: 1;
+}
+
+.warning-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1E293B;
+  margin: 0 0 4px;
+}
+
+.warning-desc {
+  font-size: 13px;
+  color: #64748B;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.el-button--primary {
+  background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+  border: none;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.35);
+}
+
+.el-button--primary:hover {
+  background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.45);
+}
+
+.el-button--danger {
+  box-shadow: 0 2px 6px rgba(245, 108, 108, 0.35);
+}
+
+.el-button--danger:hover {
+  box-shadow: 0 4px 12px rgba(245, 108, 108, 0.45);
+}
+
+.task-form .el-row {
+  margin-bottom: 18px;
+}
+
+.task-form .el-col:last-child .el-form-item {
+  margin-bottom: 0;
 }
 </style>
