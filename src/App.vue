@@ -396,8 +396,17 @@ const onDragStart = (task, columnId, index) => {
   })
 }
 
+const resetDragStatus = () => {
+  dragStatus.value = {
+    taskId: null,
+    sourceColumn: null,
+    targetColumn: null,
+    active: false
+  }
+}
+
 const onDragEnd = () => {
-  dragStatus.value.active = false
+  resetDragStatus()
   const cards = document.querySelectorAll('.task-card')
   cards.forEach(card => {
     card.style.opacity = ''
@@ -462,7 +471,7 @@ const onDrop = (targetColumnId) => {
   const { taskId, sourceColumn } = dragStatus.value
   
   if (!taskId || !sourceColumn) {
-    dragStatus.value.active = false
+    resetDragStatus()
     return
   }
   
@@ -479,7 +488,7 @@ const onDrop = (targetColumnId) => {
     }
   }
   
-  dragStatus.value.active = false
+  resetDragStatus()
 }
 
 onMounted(() => {
