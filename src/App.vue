@@ -47,19 +47,16 @@
               @dragend="onDragEnd"
             >
               <div class="task-header">
-                <div class="task-priority-badge" :class="`priority-${task.priority}`">
-                  <el-icon v-if="task.priority === 'high'" size="12"><Warning /></el-icon>
-                  <el-icon v-else-if="task.priority === 'medium'" size="12"><InfoFilled /></el-icon>
-                  <el-icon v-else size="12"><CircleCheck /></el-icon>
+                <div class="task-priority-badge" :class="'priority-' + task.priority">
                   <span>{{ getPriorityLabel(task.priority) }}</span>
                 </div>
                 <div class="task-actions">
-                  <el-tooltip content="编辑任务" placement="top">
-                    <el-button type="primary" text @click.stop="handleEditTask(task)" :icon="Edit" />
-                  </el-tooltip>
-                  <el-tooltip content="删除任务" placement="top">
-                    <el-button type="danger" text @click.stop="handleDeleteTask(task)" :icon="Delete" />
-                  </el-tooltip>
+                  <button class="action-btn edit-btn" @click.stop="handleEditTask(task)" title="编辑任务">
+                    <el-icon :size="16"><Edit /></el-icon>
+                  </button>
+                  <button class="action-btn delete-btn" @click.stop="handleDeleteTask(task)" title="删除任务">
+                    <el-icon :size="16"><Delete /></el-icon>
+                  </button>
                 </div>
               </div>
 
@@ -70,7 +67,7 @@
 
               <div class="task-footer">
                 <div class="footer-left">
-                  <el-tag v-if="task.dueDate" :type="getDueDateTagType(task.dueDate)" effect="light" size="small" class="due-date-tag">
+                  <el-tag v-if="task.dueDate" :type="getDueDateTagType(task.dueDate)" effect="light" size="small">
                     <el-icon><Calendar /></el-icon>
                     <span>{{ formatDate(task.dueDate) }}</span>
                   </el-tag>
@@ -101,9 +98,9 @@
       :title="isEdit ? '编辑任务' : '新建任务'"
       width="560px"
       :close-on-click-modal="false"
-      class="task-dialog"
+      @closed="handleDialogClosed"
     >
-      <el-form :model="formData" :rules="formRules" ref="formRef" label-width="80px" class="task-form">
+      <el-form :model="formData" :rules="formRules" ref="formRef" label-width="80px">
         <el-form-item label="标题" prop="title">
           <el-input v-model="formData.title" placeholder="请输入任务标题" maxlength="50" show-word-limit />
         </el-form-item>
@@ -115,33 +112,22 @@
               :key="column.id"
               :label="column.label"
               :value="column.id"
-            >
-              <span class="option-dot" :style="{ backgroundColor: column.color }"></span>
-              <span>{{ column.label }}</span>
-            </el-option>
+            />
           </el-select>
         </el-form-item>
 
         <el-form-item label="优先级" prop="priority">
           <el-radio-group v-model="formData.priority">
-            <el-radio-button value="high">
-              <span class="priority-option"><el-icon><Warning /></el-icon> 高</span>
-            </el-radio-button>
-            <el-radio-button value="medium">
-              <span class="priority-option"><el-icon><InfoFilled /></el-icon> 中</span>
-            </el-radio-button>
-            <el-radio-button value="low">
-              <span class="priority-option"><el-icon><CircleCheck /></el-icon> 低</span>
-            </el-radio-button>
+            <el-radio-button value="high">高</el-radio-button>
+            <el-radio-button value="medium">中</el-radio-button>
+            <el-radio-button value="low">低</el-radio-button>
           </el-radio-group>
         </el-form-item>
 
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="负责人" prop="assignee">
-              <el-input v-model="formData.assignee" placeholder="负责人姓名" maxlength="20" clearable>
-                <template #prefix><el-icon><User /></el-icon></template>
-              </el-input>
+              <el-input v-model="formData.assignee" placeholder="负责人姓名" maxlength="20" clearable />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -152,10 +138,7 @@
                 placeholder="选择日期"
                 style="width: 100%"
                 value-format="YYYY-MM-DD"
-                format="YYYY-MM-DD"
-              >
-                <template #prefix><el-icon><Calendar /></el-icon></template>
-              </el-date-picker>
+              />
             </el-form-item>
           </el-col>
         </el-row>
@@ -184,7 +167,6 @@
       v-model="deleteDialogVisible"
       title="确认删除"
       width="420px"
-      class="delete-dialog"
     >
       <div class="delete-warning">
         <el-icon size="40" color="#F56C6C"><Warning /></el-icon>
@@ -205,8 +187,7 @@
 import { ref, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { 
-  Plus, Edit, Delete, Warning, InfoFilled, CircleCheck, 
-  Calendar, User, Tickets, Document 
+  Plus, Edit, Delete, Warning, Calendar, User, Tickets, Document 
 } from '@element-plus/icons-vue'
 
 const STORAGE_KEY = 'kanban-tasks'
@@ -249,12 +230,22 @@ const formRules = {
 }
 
 const getTasksByStatus = (status) => {
-  return tasks.value.filter(task => task.status === status)
+  const columnTasks = tasks.value.filter(task => task.status === status)
+  
+  columnTasks.sort((a, b) => {
+    const priorityOrder = { high: 3, medium: 2, low: 1 }
+    const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority]
+    if (priorityDiff !== 0) return priorityDiff
+    
+    return new Date(a.createdAt) - new Date(b.createdAt)
+  })
+  
+  return columnTasks
 }
 
 const getPriorityLabel = (priority) => {
-  const map = { high: '高', medium: '中', low: '低' }
-  return map[priority] || '中'
+  const map = { high: '高优先级', medium: '中优先级', low: '低优先级' }
+  return map[priority] || '中优先级'
 }
 
 const getInitial = (name) => {
@@ -267,7 +258,7 @@ const formatDate = (date) => {
   const d = new Date(date)
   const month = (d.getMonth() + 1).toString().padStart(2, '0')
   const day = d.getDate().toString().padStart(2, '0')
-  return `${month}月${day}日`
+  return month + '月' + day + '日'
 }
 
 const getDueDateTagType = (dueDate) => {
@@ -320,6 +311,13 @@ const resetForm = () => {
   }
   isEdit.value = false
   submitting.value = false
+}
+
+const handleDialogClosed = () => {
+  if (formRef.value) {
+    formRef.value.resetFields()
+  }
+  resetForm()
 }
 
 const handleAddTask = () => {
@@ -386,22 +384,10 @@ const onDragStart = (task, columnId, index) => {
     targetColumn: null,
     active: true
   }
-  nextTick(() => {
-    const cards = document.querySelectorAll('.task-card')
-    cards.forEach(card => {
-      if (card.classList.contains('dragging')) {
-        card.style.opacity = '0.5'
-      }
-    })
-  })
 }
 
 const onDragEnd = () => {
   dragStatus.value.active = false
-  const cards = document.querySelectorAll('.task-card')
-  cards.forEach(card => {
-    card.style.opacity = ''
-  })
 }
 
 const onDragOver = (columnId) => {
@@ -419,31 +405,49 @@ const reorderTasks = (taskId, sourceColumnId, targetColumnId) => {
   const task = tasks.value[taskIndex]
   
   if (sourceColumnId === targetColumnId) {
-    const columnTasks = getTasksByStatus(sourceColumnId)
+    const columnTasks = tasks.value.filter(t => t.status === sourceColumnId)
     if (columnTasks.length <= 1) return false
     
     const currentIndex = columnTasks.findIndex(t => t.id === taskId)
     
-    const newOrder = [...columnTasks]
-    const [removed] = newOrder.splice(currentIndex, 1)
+    const taskToMove = tasks.value.splice(taskIndex, 1)[0]
     
-    let insertIndex = 0
-    if (currentIndex === 0) {
-      insertIndex = 1
-    } else if (currentIndex === columnTasks.length - 1) {
-      insertIndex = columnTasks.length - 2
-    } else {
-      insertIndex = currentIndex + 1
-      if (insertIndex >= newOrder.length) {
-        insertIndex = newOrder.length
-      }
+    let newIndex = currentIndex + 1
+    if (newIndex >= columnTasks.length) {
+      newIndex = currentIndex - 1
+    }
+    if (newIndex < 0) {
+      return false
     }
     
-    newOrder.splice(insertIndex, 0, removed)
+    let insertGlobalIndex = -1
+    const updatedColumnTasks = tasks.value.filter(t => t.status === sourceColumnId)
     
-    const otherTasks = tasks.value.filter(t => t.status !== sourceColumnId)
-    
-    tasks.value = [...otherTasks, ...newOrder]
+    if (updatedColumnTasks.length === 0) {
+      tasks.value.push(taskToMove)
+    } else {
+      if (newIndex >= updatedColumnTasks.length) {
+        const lastTask = updatedColumnTasks[updatedColumnTasks.length - 1]
+        insertGlobalIndex = tasks.value.findIndex(t => t.id === lastTask.id)
+        if (insertGlobalIndex !== -1) {
+          tasks.value.splice(insertGlobalIndex + 1, 0, taskToMove)
+        } else {
+          tasks.value.push(taskToMove)
+        }
+      } else {
+        const targetTask = updatedColumnTasks[newIndex]
+        insertGlobalIndex = tasks.value.findIndex(t => t.id === targetTask.id)
+        if (insertGlobalIndex !== -1) {
+          if (newIndex > currentIndex) {
+            tasks.value.splice(insertGlobalIndex + 1, 0, taskToMove)
+          } else {
+            tasks.value.splice(insertGlobalIndex, 0, taskToMove)
+          }
+        } else {
+          tasks.value.push(taskToMove)
+        }
+      }
+    }
     
     return true
     
@@ -473,7 +477,7 @@ const onDrop = (targetColumnId) => {
     
     if (sourceColumn !== targetColumnId) {
       const columnLabel = columns.find(c => c.id === targetColumnId)?.label || ''
-      ElMessage.success(`任务已移动到「${columnLabel}」`)
+      ElMessage.success('任务已移动到「' + columnLabel + '」')
     } else {
       ElMessage.success('任务顺序已调整')
     }
@@ -671,12 +675,9 @@ onMounted(() => {
 }
 
 .task-priority-badge {
-  display: flex;
-  align-items: center;
-  gap: 4px;
   font-size: 11px;
   font-weight: 500;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 6px;
 }
 
@@ -697,13 +698,45 @@ onMounted(() => {
 
 .task-actions {
   display: flex;
-  gap: 2px;
+  gap: 6px;
   opacity: 0;
   transition: opacity 0.2s ease;
 }
 
 .task-card:hover .task-actions {
   opacity: 1;
+}
+
+.action-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.edit-btn {
+  background: #EFF6FF;
+  color: #3B82F6;
+}
+
+.edit-btn:hover {
+  background: #DBEAFE;
+  color: #2563EB;
+}
+
+.delete-btn {
+  background: #FEF2F2;
+  color: #EF4444;
+}
+
+.delete-btn:hover {
+  background: #FEE2E2;
+  color: #DC2626;
 }
 
 .task-content {
@@ -741,14 +774,6 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.due-date-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  height: 22px;
 }
 
 .assignee-badge {
@@ -798,6 +823,31 @@ onMounted(() => {
   font-size: 12px;
   color: #CBD5E1;
 }
+
+.delete-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.warning-content {
+  flex: 1;
+}
+
+.warning-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1E293B;
+  margin: 0 0 4px;
+}
+
+.warning-desc {
+  font-size: 13px;
+  color: #64748B;
+  margin: 0;
+  line-height: 1.5;
+}
 </style>
 
 <style>
@@ -837,19 +887,31 @@ onMounted(() => {
 .el-select__wrapper,
 .el-textarea__inner {
   border-radius: 8px;
-  border-color: #E2E8F0;
+  border: 1px solid #D1D5DB !important;
   box-shadow: none;
 }
 
 .el-input__wrapper:hover,
 .el-select__wrapper:hover {
-  border-color: #CBD5E1;
+  border-color: #9CA3AF !important;
 }
 
 .el-input__wrapper.is-focus,
 .el-select__wrapper.is-focus {
-  border-color: #3B82F6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  border-color: #3B82F6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1) !important;
+}
+
+.el-date-editor .el-input__wrapper {
+  border: 1px solid #D1D5DB !important;
+}
+
+.el-date-editor .el-input__wrapper:hover {
+  border-color: #9CA3AF !important;
+}
+
+.el-date-editor .el-input__wrapper.is-focus {
+  border-color: #3B82F6 !important;
 }
 
 .el-radio-button__original-radio:checked + .el-radio-button__inner {
@@ -863,45 +925,6 @@ onMounted(() => {
 
 .el-radio-button:last-child .el-radio-button__inner {
   border-radius: 0 8px 8px 0;
-}
-
-.priority-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.option-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 8px;
-}
-
-.delete-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 8px 0;
-}
-
-.warning-content {
-  flex: 1;
-}
-
-.warning-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1E293B;
-  margin: 0 0 4px;
-}
-
-.warning-desc {
-  font-size: 13px;
-  color: #64748B;
-  margin: 0;
-  line-height: 1.5;
 }
 
 .el-button--primary {
@@ -921,13 +944,5 @@ onMounted(() => {
 
 .el-button--danger:hover {
   box-shadow: 0 4px 12px rgba(245, 108, 108, 0.45);
-}
-
-.task-form .el-row {
-  margin-bottom: 18px;
-}
-
-.task-form .el-col:last-child .el-form-item {
-  margin-bottom: 0;
 }
 </style>
